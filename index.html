@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>モンスターブロック崩し - 試作品</title>
+    <style>
+        body {
+            background-color: #222;
+            color: white;
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+        h1 {
+            margin-bottom: 10px;
+            font-size: 20px;
+        }
+        canvas {
+            background-color: #111;
+            border: 4px solid #444;
+            border-radius: 8px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            cursor: none; /* マウスカーソルを非表示にする */
+        }
+        .info {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #aaa;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>モンスターブロック崩し (原型)</h1>
+    <!-- ゲーム画面を描画するキャンバス -->
+    <canvas id="gameCanvas" width="400" height="600"></canvas>
+    <div class="info">マウスを左右に動かしてパドルを操作</div>
+
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+
+        // --- ゲームの設定データ ---
+        // ボールの設定
+        let ball = {
+            x: canvas.width / 2,
+            y: canvas.height - 50,
+            dx: 4,  // 横方向の速度
+            dy: -4, // 縦方向の速度
+            radius: 8,
+            color: "#ffdd67"
+        };
+
+        // パドルの設定
+        let paddle = {
+            height: 15,
+            width: 80,
+            x: (canvas.width - 80) / 2,
+            color: "#00adb5"
+        };
+
+        // ブロック（モンスター）の設定
+        const blockRowCount = 4;    // 行数
+        const blockColumnCount = 5; // 列数
+        const blockWidth = 65;      // ブロックの幅
+        const blockHeight = 25;     // ブロックの高さ
+        const blockPadding = 8;     // ブロック同士の隙間
+        const blockOffsetTop = 50;  // 画面上部からの隙間
+        const blockOffsetLeft = 20; // 画面左側からの隙間
+
+        // ブロックの配列を初期化 (status: 1 は存在する、0 は破壊された)
+        let blocks = [];
+        for (let c = 0; c < blockColumnCount; c++) {
+            blocks[c] = [];
+            for (let r = 0; r < blockRowCount; r++) {
+                blocks[c][r] = { x: 0, y: 0, status: 1 };
+            }
+        }
+
+        // --- 操作系 ---
+        // マウスの動きに合わせてパドルの位置を変える
+        document.addEventListener("mousemove", (e) => {
+            const relativeX = e.clientX - canvas.getBoundingClientRect().left;
+            if (relativeX > 0 && relativeX < canvas.width) {
+                // パドルの中心がマウスの位置にくるように計算
+                paddle.x = relativeX - paddle.width / 2;
+            }
+        });
+
+        // --- 衝突検知システム ---
+        function collisionDetection() {
+            for (let c = 0; c < blockColumnCount; c++) {
+                for (let r = 0; r < blockRowCount; r++) {
+                    let b = blocks[c][r];
+                    if (b.status === 1) {
+                        // ボールがブロックの範囲内に入ったか判定
+                        if (ball.x > b.x && ball.x < b.x + blockWidth && ball.y > b.y && ball.y < b.y + blockHeight) {
+                            ball.dy = -ball.dy; // 跳ね返る
+                            b.status = 0;       // ブロックを消す
+                            
+                            // クリア判定（残りのブロックがあるかチェック）
+                            if (checkWin()) {
+                                alert("ステージクリア！");
+                                document.location.reload();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // すべてのブロックが壊れたか調べる関数
+        function checkWin() {
+            for (let c = 0; c < blockColumnCount; c++) {
+                for (let r = 0; r < blockRowCount; r++) {
+                    if (blocks[c][r].status === 1) return false;
+                }
+            }
+            return true;
+        }
+
+        // --- 描画システム ---
+        // ボールを描く
+        function drawBall() {
+            ctx.beginPath();
+            ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+            ctx.fillStyle = ball.color;
+            ctx.fill();
+            ctx.closePath();
+        }
+
+        // パドルを描く
+        function drawPaddle() {
+            ctx.beginPath();
+            ctx.rect(paddle.x, canvas.height - paddle.height - 10, paddle.width, paddle.height);
+            ctx.fillStyle = paddle.color;
+            ctx.fill();
+            ctx.closePath();
+        }
+
+        // ブロックたちを描く
+        function drawBlocks() {
+            for (let c = 0; c < blockColumnCount; c++) {
+                for (let r = 0; r < blockRowCount; r++) {
+                    if (blocks[c][r].status === 1) {
+                        // ブロックそれぞれの座標を計算
+                        let blockX = (c * (blockWidth + blockPadding)) + blockOffsetLeft;
+                        let blockY = (r * (blockHeight + blockPadding)) + blockOffsetTop;
+                        blocks[c][r].x = blockX;
+                        blocks[c][r].y = blockY;
+                        
+                        ctx.beginPath();
+                        ctx.rect(blockX, blockY, blockWidth, blockHeight);
+                        ctx.fillStyle = "#ff5722"; // モンスターブロックの色
+                        ctx.fill();
+                        ctx.closePath();
+                    }
+                }
+            }
+        }
+
+        // --- メインのゲームループ（ここが高速で回り続ける） ---
+        function draw() {
+            // 画面を一度きれいに消す
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 各要素を描画
+            drawBlocks();
+            drawBall();
+            drawPaddle();
+            
+            // 衝突判定
+            collisionDetection();
+
+            // 壁との衝突判定（左右の壁）
+            if (ball.x + ball.dx > canvas.width - ball.radius || ball.x + ball.dx < ball.radius) {
+                ball.dx = -ball.dx;
+            }
+            // 壁との衝突判定（天井）
+            if (ball.y + ball.dy < ball.radius) {
+                ball.dy = -ball.dy;
+            } 
+            // パドルとの衝突判定（床に落ちる前）
+            else if (ball.y + ball.dy > canvas.height - ball.radius - paddle.height - 10) {
+                if (ball.x > paddle.x && ball.x < paddle.x + paddle.width) {
+                    ball.dy = -ball.dy;
+                } else if (ball.y + ball.dy > canvas.height - ball.radius) {
+                    // ゲームオーバー判定
+                    alert("ゲームオーバー");
+                    document.location.reload();
+                }
+            }
+
+            // ボールを移動させる
+            ball.x += ball.dx;
+            ball.y += ball.dy;
+
+            // 次のフレームのアニメーションを要請
+            requestAnimationFrame(draw);
+        }
+
+        // ゲームスタート！
+        draw();
+    </script>
+</body>
+</html>
